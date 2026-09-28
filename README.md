@@ -29,6 +29,8 @@ JSON output for scripts and support tickets:
 python3 gpu_test.py --json
 ```
 
+When launched in a local terminal with no flags, an arrow-key menu lets you run diagnostics, view laptop GPU switching guidance, install recommended Arch drivers, or print JSON. Piped and CI runs stay noninteractive.
+
 The tool uses optional system utilities when present: `nvidia-smi`, `rocminfo`, `lspci`, `vulkaninfo`, `glxinfo`, and PowerShell CIM on Windows. Python 3.9+ is the only required dependency.
 
 On Arch Linux, the interactive report detects NVIDIA, AMD, or Intel hardware and offers a matching `pacman -S --needed` command. Installation is opt-in; JSON mode never installs packages.

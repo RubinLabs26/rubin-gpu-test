@@ -144,6 +144,65 @@ def current_gpu_in_use(gpus: list[GPU]) -> dict[str, object]:
     }
 
 
+def select_menu(title: str, options: list[str]) -> int:
+    """Small dependency-free arrow-key menu for local terminal runs."""
+    selected = 0
+    print(f"\n{title}")
+    print("Use ↑/↓ and Enter (or number keys).")
+    if os.name == "nt":
+        import msvcrt
+        while True:
+            for index, option in enumerate(options):
+                marker = "▶" if index == selected else " "
+                print(f"\r{marker} {option}                    ")
+            key = msvcrt.getwch()
+            if key in ("\x00", "\xe0"):
+                key = msvcrt.getwch()
+                if key == "H": selected = (selected - 1) % len(options)
+                elif key == "P": selected = (selected + 1) % len(options)
+            elif key in ("\r", "\n"): return selected
+            elif key.isdigit() and 1 <= int(key) <= len(options): return int(key) - 1
+            print("\x1b[{}A".format(len(options)), end="")
+    try:
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        previous = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                for index, option in enumerate(options):
+                    marker = "▶" if index == selected else " "
+                    print(f"{marker} {option}")
+                key = sys.stdin.read(1)
+                if key == "\x1b":
+                    key += sys.stdin.read(2)
+                    if key == "\x1b[A": selected = (selected - 1) % len(options)
+                    elif key == "\x1b[B": selected = (selected + 1) % len(options)
+                elif key in ("\n", "\r"): return selected
+                elif key.isdigit() and 1 <= int(key) <= len(options): return int(key) - 1
+                print(f"\x1b[{len(options)}A", end="", flush=True)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, previous)
+    except (ImportError, OSError):
+        for index, option in enumerate(options, 1): print(f"{index}. {option}")
+        answer = input("Select an option: ").strip()
+        return max(0, min(len(options) - 1, int(answer or "1") - 1))
+
+
+def switching_guidance(gpus: list[GPU]) -> None:
+    print("\nGPU switching guidance")
+    if is_termux():
+        print("Android/Termux selects the renderer through the device compositor; this tool cannot switch it safely.")
+    elif platform.system() == "Windows":
+        print("Windows: Settings → System → Display → Graphics → choose the app → Options → Power saving or High performance.")
+        print("Detected adapters: " + ", ".join(g.name for g in gpus))
+    else:
+        print("Linux: use DRI_PRIME=1 command to select the secondary GPU, or prime-run <command> on NVIDIA PRIME systems.")
+        print("Example: DRI_PRIME=1 python3 gpu_test.py")
+    input("Press Enter to continue...")
+
+
 def run(args: list[str], timeout: float = 4) -> str:
     try:
         result = subprocess.run(
@@ -275,7 +334,22 @@ def main() -> int:
     runtime = {"termux": is_termux(), "root": root_status()}
     active_gpu = current_gpu_in_use(gpus)
     driver_recommendation = arch_driver_recommendation(gpus)
-    offer_arch_driver_install(driver_recommendation if not args.json else None)
+    if not args.json and sys.stdin.isatty() and sys.stdout.isatty():
+        choice = select_menu("Rubin GPU Test", [
+            "Run full diagnostics",
+            "Show GPU switching guidance",
+            "Recommend/install Arch drivers",
+            "Print JSON report",
+            "Exit",
+        ])
+        if choice == 4:
+            return 0
+        if choice == 1:
+            switching_guidance(gpus)
+        elif choice == 2:
+            offer_arch_driver_install(driver_recommendation)
+        elif choice == 3:
+            args.json = True
     api, api_status, api_ms = api_probe()
     benchmark_ms, benchmark_detail = benchmark()
     result = {
