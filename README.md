@@ -33,6 +33,14 @@ When launched in a local terminal with no flags, an arrow-key menu lets you run 
 
 Interactive runs show animated loading indicators while scanning adapters, checking permissions, probing APIs, and running the responsiveness test.
 
+The one-line runner opens the interactive menu when launched from a real terminal:
+
+```bash
+curl -fsSL https://gist.githubusercontent.com/itzlalpekhlua/1609d8155b9ee008fc42ab003c07fcba/raw/run-gpu-test-remote.sh | bash
+```
+
+Use `--json` to skip the menu for automation.
+
 The tool uses optional system utilities when present: `nvidia-smi`, `rocminfo`, `lspci`, `vulkaninfo`, `glxinfo`, and PowerShell CIM on Windows. Python 3.9+ is the only required dependency.
 
 On Arch Linux, the interactive report detects NVIDIA, AMD, or Intel hardware and offers a matching `pacman -S --needed` command. Installation is opt-in; JSON mode never installs packages.

@@ -16,4 +16,13 @@ else
   exit 1
 fi
 
-curl --fail --location --silent --show-error "$RAW_SCRIPT" | "$PYTHON" - "$@"
+TEMP_SCRIPT="$(mktemp -t rubin-gpu-test.XXXXXX.py)"
+cleanup() { rm -f "$TEMP_SCRIPT"; }
+trap cleanup EXIT
+curl --fail --location --silent --show-error "$RAW_SCRIPT" -o "$TEMP_SCRIPT"
+
+if [ -t 1 ] && [ -r /dev/tty ]; then
+  "$PYTHON" "$TEMP_SCRIPT" "$@" </dev/tty
+else
+  "$PYTHON" "$TEMP_SCRIPT" "$@"
+fi
