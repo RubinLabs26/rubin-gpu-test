@@ -23,6 +23,12 @@ pkg update && pkg install python curl
 curl -fsSL https://gist.githubusercontent.com/itzlalpekhlua/1609d8155b9ee008fc42ab003c07fcba/raw/run-gpu-test-remote.sh | bash
 ```
 
+Fish shell users can use the native launcher from a checkout:
+
+```fish
+curl -fsSL https://raw.githubusercontent.com/RubinLabs26/rubin-gpu-test/main/run-gpu-test.fish | fish
+```
+
 JSON output for scripts and support tickets:
 
 ```bash
