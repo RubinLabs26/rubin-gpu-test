@@ -1,6 +1,6 @@
 # Rubin GPU Test
 
-Small, dependency-free GPU diagnostics for Windows and Linux. It prints a clean terminal report, detects NVIDIA/AMD/Intel adapters, probes available graphics APIs, and runs a safe repeatable responsiveness test. It does not modify drivers, overclock hardware, or write files.
+Small, dependency-free GPU diagnostics for Windows, Linux, and Termux on Android. It prints a clean terminal report, detects available adapters, checks root access on Termux without opening a `su` prompt, probes graphics APIs, and runs a safe repeatable responsiveness test. It does not modify drivers, overclock hardware, or write files.
 
 ## Run
 
@@ -14,6 +14,13 @@ Linux, Arch, Fedora, Debian, Alpine, and other distributions:
 
 ```bash
 python3 gpu_test.py
+```
+
+Termux:
+
+```sh
+pkg update && pkg install python curl
+curl -fsSL https://gist.githubusercontent.com/itzlalpekhlua/1609d8155b9ee008fc42ab003c07fcba/raw/run-gpu-test-remote.sh | bash
 ```
 
 JSON output for scripts and support tickets:

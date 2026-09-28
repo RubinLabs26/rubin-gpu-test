@@ -40,6 +40,32 @@ def command(name: str) -> str | None:
     return shutil.which(name)
 
 
+def is_termux() -> bool:
+    """Return whether this process is running inside Termux on Android."""
+    return bool(os.environ.get("TERMUX_VERSION")) or os.environ.get("PREFIX", "").startswith(
+        "/data/data/com.termux/"
+    )
+
+
+def root_status() -> dict[str, object]:
+    """Check root state without opening an interactive su prompt."""
+    uid = run(["id", "-u"], timeout=1) if command("id") else ""
+    uid = uid.strip()
+    effective_root = uid == "0"
+    su_available = bool(command("su"))
+    su_root = False
+    if su_available and not effective_root:
+        su_uid = run(["su", "-n", "-c", "id -u"], timeout=2).strip()
+        su_root = su_uid == "0"
+    return {
+        "is_root": effective_root or su_root,
+        "effective_uid": uid or "unknown",
+        "su_binary": su_available,
+        "su_root_grant": su_root,
+        "checked_without_prompt": True,
+    }
+
+
 def run(args: list[str], timeout: float = 4) -> str:
     try:
         result = subprocess.run(
@@ -108,6 +134,17 @@ def detect_gpu() -> tuple[list[GPU], list[str]]:
                     vendor = "AMD" if "amd" in name.lower() or "advanced micro" in name.lower() else "Intel" if "intel" in name.lower() else "Unknown"
                     found.append(GPU(name, vendor=vendor, backend="OpenGL/Vulkan"))
 
+    if is_termux():
+        notes.append("Termux/Android environment detected")
+        if command("dumpsys"):
+            raw = run(["dumpsys", "SurfaceFlinger"], timeout=4)
+            for line in raw.splitlines():
+                if "GLES:" in line or "GLES renderer" in line:
+                    renderer = line.split(":", 1)[-1].strip()
+                    if renderer and not any(renderer.casefold() in g.name.casefold() for g in found):
+                        found.append(GPU(renderer, vendor="Android", backend="OpenGL ES"))
+                        break
+
     if not found:
         found.append(GPU("No GPU telemetry returned", backend="Unavailable"))
         notes.append("Install lspci, nvidia-smi, rocminfo, or PowerShell GPU tools for richer details")
@@ -157,6 +194,7 @@ def main() -> int:
     args = parser.parse_args()
     color = C(sys.stdout.isatty() and not args.no_color and os.environ.get("NO_COLOR") is None)
     gpus, notes = detect_gpu()
+    runtime = {"termux": is_termux(), "root": root_status()}
     api, api_status, api_ms = api_probe()
     benchmark_ms, benchmark_detail = benchmark()
     result = {
@@ -164,6 +202,7 @@ def main() -> int:
         "release": platform.release(),
         "machine": platform.machine(),
         "python": platform.python_version(),
+        "runtime": runtime,
         "gpus": [asdict(gpu) for gpu in gpus],
         "graphics_api": {"name": api, "status": api_status, "probe_ms": round(api_ms, 2)},
         "benchmark": {"elapsed_ms": round(benchmark_ms, 2), "detail": benchmark_detail},
@@ -174,6 +213,10 @@ def main() -> int:
         return 0
     banner(color)
     print(f"{color.cyan}{color.bold}SYSTEM{color.reset}  {platform.system()} {platform.release()} · {platform.machine()} · Python {platform.python_version()}")
+    root = runtime["root"]
+    environment = "Termux/Android" if runtime["termux"] else "Desktop"
+    root_label = "yes" if root["is_root"] else "no"
+    print(f"{color.cyan}{color.bold}ENV{color.reset}    {environment} · root access: {root_label} (uid={root['effective_uid']})")
     print(f"{color.cyan}{color.bold}GPU{color.reset}")
     for gpu in gpus:
         print(f"  {color.green}◆{color.reset} {gpu.name}")
