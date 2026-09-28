@@ -154,7 +154,7 @@ def select_menu(title: str, options: list[str]) -> int:
         while True:
             for index, option in enumerate(options):
                 marker = "▶" if index == selected else " "
-                print(f"\r{marker} {option}                    ")
+                print(f"{marker} {option}")
             key = msvcrt.getwch()
             if key in ("\x00", "\xe0"):
                 key = msvcrt.getwch()
