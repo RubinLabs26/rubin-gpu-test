@@ -110,6 +110,40 @@ def root_status() -> dict[str, object]:
     }
 
 
+def current_gpu_in_use(gpus: list[GPU]) -> dict[str, object]:
+    """Find the renderer currently selected by the desktop graphics stack."""
+    renderer = ""
+    source = "unavailable"
+    if platform.system() == "Windows":
+        raw = run([
+            "powershell", "-NoProfile", "-Command",
+            "Get-CimInstance Win32_VideoController | Where-Object {$_.Status -eq 'OK'} | "
+            "Select-Object -First 1 -ExpandProperty Name",
+        ])
+        renderer, source = raw.splitlines()[0].strip(), "Windows WMI" if raw else source
+    elif is_termux() and command("dumpsys"):
+        raw = run(["dumpsys", "SurfaceFlinger"], timeout=4)
+        for line in raw.splitlines():
+            if "GLES:" in line or "GLES renderer" in line:
+                renderer, source = line.split(":", 1)[-1].strip(), "Android SurfaceFlinger"
+                break
+    elif command("glxinfo"):
+        raw = run(["glxinfo", "-B"], timeout=8)
+        for line in raw.splitlines():
+            if "OpenGL renderer string:" in line:
+                renderer, source = line.split(":", 1)[-1].strip(), "OpenGL"
+                break
+    software_markers = ("llvmpipe", "software", "microsoft basic", "remote display", "hyper-v", "softpipe")
+    hardware_accelerated = bool(renderer) and not any(marker in renderer.casefold() for marker in software_markers)
+    matched = next((g.name for g in gpus if g.name.casefold() in renderer.casefold() or renderer.casefold() in g.name.casefold()), None)
+    return {
+        "renderer": renderer or "Unknown",
+        "matched_gpu": matched,
+        "source": source,
+        "hardware_accelerated": hardware_accelerated if renderer else None,
+    }
+
+
 def run(args: list[str], timeout: float = 4) -> str:
     try:
         result = subprocess.run(
@@ -239,6 +273,7 @@ def main() -> int:
     color = C(sys.stdout.isatty() and not args.no_color and os.environ.get("NO_COLOR") is None)
     gpus, notes = detect_gpu()
     runtime = {"termux": is_termux(), "root": root_status()}
+    active_gpu = current_gpu_in_use(gpus)
     driver_recommendation = arch_driver_recommendation(gpus)
     offer_arch_driver_install(driver_recommendation if not args.json else None)
     api, api_status, api_ms = api_probe()
@@ -249,6 +284,7 @@ def main() -> int:
         "machine": platform.machine(),
         "python": platform.python_version(),
         "runtime": runtime,
+        "active_gpu": active_gpu,
         "driver_recommendation": driver_recommendation,
         "gpus": [asdict(gpu) for gpu in gpus],
         "graphics_api": {"name": api, "status": api_status, "probe_ms": round(api_ms, 2)},
@@ -266,6 +302,9 @@ def main() -> int:
     print(f"{color.cyan}{color.bold}ENV{color.reset}    {environment} · root access: {root_label} (uid={root['effective_uid']})")
     if driver_recommendation:
         print(f"{color.cyan}{color.bold}DRIVER{color.reset} Arch recommendation: {driver_recommendation['command']}")
+    active_label = active_gpu["renderer"]
+    acceleration = "hardware" if active_gpu["hardware_accelerated"] else "software/unknown"
+    print(f"{color.cyan}{color.bold}ACTIVE{color.reset} {active_label} · {acceleration} · source={active_gpu['source']}")
     print(f"{color.cyan}{color.bold}GPU{color.reset}")
     for gpu in gpus:
         print(f"  {color.green}◆{color.reset} {gpu.name}")

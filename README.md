@@ -33,6 +33,8 @@ The tool uses optional system utilities when present: `nvidia-smi`, `rocminfo`, 
 
 On Arch Linux, the interactive report detects NVIDIA, AMD, or Intel hardware and offers a matching `pacman -S --needed` command. Installation is opt-in; JSON mode never installs packages.
 
+The `ACTIVE` section reports the renderer currently selected by Windows WMI, OpenGL, or Android SurfaceFlinger and labels it hardware accelerated or software/unknown. This is useful on laptops with integrated and discrete adapters.
+
 ## License
 
 MIT © Rubin Labs contributors.

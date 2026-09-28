@@ -11,11 +11,7 @@ else
   if [ -n "${TERMUX_VERSION:-}" ]; then
     echo "Python 3 is required in Termux. Install it with: pkg update && pkg install python" >&2
   else
-  if [ -n "${TERMUX_VERSION:-}" ]; then
-    echo "Python 3 is required in Termux. Install it with: pkg update && pkg install python" >&2
-  else
     echo "Python 3 is required. Install it with your distribution package manager." >&2
-  fi
   fi
   exit 1
 fi
