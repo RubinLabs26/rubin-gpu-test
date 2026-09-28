@@ -47,6 +47,50 @@ def is_termux() -> bool:
     )
 
 
+def is_arch_linux() -> bool:
+    return platform.system() == "Linux" and (
+        os.path.exists("/etc/arch-release")
+        or "arch" in run(["sh", "-c", ". /etc/os-release 2>/dev/null; printf '%s' \"${ID:-}\""], timeout=1).lower()
+    )
+
+
+def arch_driver_recommendation(gpus: list[GPU]) -> dict[str, object] | None:
+    if not is_arch_linux():
+        return None
+    names = " ".join(g.name.lower() for g in gpus)
+    if "nvidia" in names or command("nvidia-smi"):
+        packages = ["nvidia", "nvidia-utils"]
+        reason = "NVIDIA GPU detected"
+    elif "amd" in names or "radeon" in names or command("rocminfo"):
+        packages = ["mesa", "vulkan-radeon"]
+        reason = "AMD GPU detected"
+    elif "intel" in names:
+        packages = ["mesa", "vulkan-intel"]
+        reason = "Intel GPU detected"
+    else:
+        packages = ["mesa"]
+        reason = "generic Linux graphics stack"
+    command_text = "pacman -S --needed " + " ".join(packages)
+    return {"reason": reason, "packages": packages, "command": command_text}
+
+
+def offer_arch_driver_install(recommendation: dict[str, object] | None) -> None:
+    if not recommendation or not sys.stdin.isatty() or not sys.stdout.isatty():
+        return
+    command_text = str(recommendation["command"])
+    print(f"\nArch driver helper: {recommendation['reason']}.")
+    print(f"Recommended: {command_text}")
+    answer = input("Install these packages now? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        return
+    command_line = command_text if os.geteuid() == 0 else "sudo " + command_text
+    result = subprocess.run(command_line, shell=True)
+    if result.returncode == 0:
+        print("Driver packages installed. Reboot if your graphics stack requests it.")
+    else:
+        print("Driver installation did not complete; run the recommended command manually.")
+
+
 def root_status() -> dict[str, object]:
     """Check root state without opening an interactive su prompt."""
     uid = run(["id", "-u"], timeout=1) if command("id") else ""
@@ -195,6 +239,8 @@ def main() -> int:
     color = C(sys.stdout.isatty() and not args.no_color and os.environ.get("NO_COLOR") is None)
     gpus, notes = detect_gpu()
     runtime = {"termux": is_termux(), "root": root_status()}
+    driver_recommendation = arch_driver_recommendation(gpus)
+    offer_arch_driver_install(driver_recommendation if not args.json else None)
     api, api_status, api_ms = api_probe()
     benchmark_ms, benchmark_detail = benchmark()
     result = {
@@ -203,6 +249,7 @@ def main() -> int:
         "machine": platform.machine(),
         "python": platform.python_version(),
         "runtime": runtime,
+        "driver_recommendation": driver_recommendation,
         "gpus": [asdict(gpu) for gpu in gpus],
         "graphics_api": {"name": api, "status": api_status, "probe_ms": round(api_ms, 2)},
         "benchmark": {"elapsed_ms": round(benchmark_ms, 2), "detail": benchmark_detail},
@@ -217,6 +264,8 @@ def main() -> int:
     environment = "Termux/Android" if runtime["termux"] else "Desktop"
     root_label = "yes" if root["is_root"] else "no"
     print(f"{color.cyan}{color.bold}ENV{color.reset}    {environment} · root access: {root_label} (uid={root['effective_uid']})")
+    if driver_recommendation:
+        print(f"{color.cyan}{color.bold}DRIVER{color.reset} Arch recommendation: {driver_recommendation['command']}")
     print(f"{color.cyan}{color.bold}GPU{color.reset}")
     for gpu in gpus:
         print(f"  {color.green}◆{color.reset} {gpu.name}")

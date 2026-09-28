@@ -31,6 +31,8 @@ python3 gpu_test.py --json
 
 The tool uses optional system utilities when present: `nvidia-smi`, `rocminfo`, `lspci`, `vulkaninfo`, `glxinfo`, and PowerShell CIM on Windows. Python 3.9+ is the only required dependency.
 
+On Arch Linux, the interactive report detects NVIDIA, AMD, or Intel hardware and offers a matching `pacman -S --needed` command. Installation is opt-in; JSON mode never installs packages.
+
 ## License
 
 MIT © Rubin Labs contributors.
