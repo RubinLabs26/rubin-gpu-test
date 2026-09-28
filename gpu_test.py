@@ -190,6 +190,39 @@ def select_menu(title: str, options: list[str]) -> int:
         return max(0, min(len(options) - 1, int(answer or "1") - 1))
 
 
+def loading_call(label: str, callback, enabled: bool = True):
+    """Run a probe with a lightweight terminal spinner and no dependencies."""
+    if not enabled:
+        return callback()
+    import threading
+    result = []
+    failure = []
+
+    def worker():
+        try:
+            result.append(callback())
+        except BaseException as error:  # re-raise on the caller thread
+            failure.append(error)
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    frames = "|/-\\"
+    tick = 0
+    print("\033[?25l", end="")
+    try:
+        while thread.is_alive():
+            print(f"\r  {frames[tick % len(frames)]} {label}...", end="", flush=True)
+            tick += 1
+            time.sleep(0.08)
+    finally:
+        thread.join()
+        print("\033[2K\r", end="")
+        print("\033[?25h", end="", flush=True)
+    if failure:
+        raise failure[0]
+    return result[0]
+
+
 def switching_guidance(gpus: list[GPU]) -> None:
     print("\nGPU switching guidance")
     if is_termux():
@@ -330,9 +363,10 @@ def main() -> int:
     parser.add_argument("--no-color", action="store_true", help="disable terminal colors")
     args = parser.parse_args()
     color = C(sys.stdout.isatty() and not args.no_color and os.environ.get("NO_COLOR") is None)
-    gpus, notes = detect_gpu()
-    runtime = {"termux": is_termux(), "root": root_status()}
-    active_gpu = current_gpu_in_use(gpus)
+    interactive = sys.stdin.isatty() and sys.stdout.isatty() and not args.json
+    gpus, notes = loading_call("Scanning graphics adapters", detect_gpu, interactive)
+    runtime = {"termux": is_termux(), "root": loading_call("Checking runtime permissions", root_status, interactive)}
+    active_gpu = loading_call("Finding active renderer", lambda: current_gpu_in_use(gpus), interactive)
     driver_recommendation = arch_driver_recommendation(gpus)
     if not args.json and sys.stdin.isatty() and sys.stdout.isatty():
         choice = select_menu("Rubin GPU Test", [
@@ -350,8 +384,8 @@ def main() -> int:
             offer_arch_driver_install(driver_recommendation)
         elif choice == 3:
             args.json = True
-    api, api_status, api_ms = api_probe()
-    benchmark_ms, benchmark_detail = benchmark()
+    api, api_status, api_ms = loading_call("Probing graphics APIs", api_probe, interactive)
+    benchmark_ms, benchmark_detail = loading_call("Running safe responsiveness test", benchmark, interactive)
     result = {
         "system": platform.system(),
         "release": platform.release(),
